@@ -1,14 +1,29 @@
+[tool.poetry]
+name = "django-prometheus"
+version = "0.1.0"
+description = ""
+authors = ["Your Name <you@example.com>"]
+readme = "README.md"
+packages = [{include = "django_prometheus"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+django-redis = "^5.4.0"
+prometheus-client = "^0.21.1"
+pip-prometheus = "^1.2.1"
+mysqlclient = "^2.2.6"
+psycopg2 = "^2.9.10"
+pytest = "7.4.3"
+pytest-django = "^4.9.0"
+pylibmc = "^1.6.3"
+pymemcache = "^4.0.0"
+python-memcached = "^1.62"
+django = "4.0"
+
+
 [build-system]
-requires = ["setuptools >= 67.7.2, < 72.0.0", "wheel >= 0.40.0"]
-build-backend = "setuptools.build_meta"
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
 
 [tool.pytest.ini_options]
 addopts = " --ignore django_prometheus/tests/end2end"
-
-[tool.ruff]
-line-length = 120
-target-version = "py38"
-
-[tool.ruff.lint]
-select = ["B", "C4", "E", "F", "I", "T10", "YTT", "W"]
-

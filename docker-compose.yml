@@ -1,0 +1,11 @@
+services:
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/usr/app/src/
+    environment:
+      - PYTHONPATH=/usr/app/src/
+      - DJANGO_SETTINGS_MODULE=django_prometheus.tests.end2end.testapp.settings
+    command: poetry run python3 django_prometheus/tests/end2end/manage.py runserver 0.0.0.0:8000

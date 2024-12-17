@@ -8,16 +8,16 @@ packages = [{include = "django_prometheus"}]
 
 [tool.poetry.dependencies]
 python = "^3.11"
-django-redis = "^5.4.0"
+# django-redis = "^5.4.0"
 prometheus-client = "^0.21.1"
 pip-prometheus = "^1.2.1"
-mysqlclient = "^2.2.6"
-psycopg2 = "^2.9.10"
+# mysqlclient = "^2.2.6"
+# psycopg2 = "^2.9.10"
 pytest = "^6.2"
 pytest-django = "^4.4.0"
-pylibmc = "^1.6.3"
-pymemcache = "^4.0.0"
-python-memcached = "^1.62"
+# pylibmc = "^1.6.3"
+# pymemcache = "^4.0.0"
+# python-memcached = "^1.62"
 django = "3.1.2"
 
 

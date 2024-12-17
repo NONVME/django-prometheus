@@ -1,5 +1,7 @@
 from django.utils.deprecation import MiddlewareMixin
 from prometheus_client import Counter, Histogram
+import re
+from django.urls import Resolver404, get_resolver
 
 from django_prometheus.conf import NAMESPACE, PROMETHEUS_LATENCY_BUCKETS, PROMETHEUS_USE_PATH_LABELS
 from django_prometheus.utils import PowersOf, Time, TimeSince
@@ -185,10 +187,57 @@ class PrometheusAfterMiddleware(MiddlewareMixin):
     """Monitoring middleware that should run after other middlewares."""
 
     metrics_cls = Metrics
+    # URL_PATTERN = re.compile(r'([^/]+)')
+    # URL_PARTS_REPLACEMENTS = {
+    #     re.escape(part): replacement
+    #     for part, replacement in {
+    #         '<uuid:id>': '<id>',
+    #         '<int:id>': '<id>',
+    #         '<str:id>': '<id>',
+    #         '<slug:id>': '<id>',
+    #         '<uuid:pk>': '<pk>',
+    #         '<int:pk>': '<pk>',
+    #         '<str:pk>': '<pk>',
+    #         '<slug:pk>': '<pk>',
+    #     }.items()
+    # }
+    
+    URL_PARTS_REPLACEMENTS = {
+        re.escape('(?P'): '',
+        re.escape('[0-9A-Fa-f-]+)'): '',
+        re.escape('[^/.]+)'): '',
+        re.escape('/$'): '/',
+        re.escape('uuid:'): '',
+        re.escape('str:'): '',
+    }
+    URL_PATTERN = re.compile('|'.join(URL_PARTS_REPLACEMENTS.keys()))
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.metrics = self.metrics_cls.get_instance()
+        self.resolver = get_resolver()
+
+    def get_url_mask(self, request) -> str:
+        url_mask = ''
+        url_path = getattr(request, 'path', None)
+        if not url_path:
+            return url_mask
+
+        try:
+            resolver_match = getattr(request, 'resolver_match', None) or self.resolver.resolve(url_path)
+            url_mask = self.URL_PATTERN.sub(
+                lambda m: self.URL_PARTS_REPLACEMENTS[re.escape(m.group(0))],
+                resolver_match.route
+            )
+        except Resolver404:
+            pass
+
+        return url_mask
+
+    def _get_view_or_path(self, request):
+        if PROMETHEUS_USE_PATH_LABELS:
+            return self.get_url_mask(request) or request.path
+        return self._get_view_name(request)
 
     def _transport(self, request):
         return "https" if request.is_secure() else "http"
@@ -233,11 +282,6 @@ class PrometheusAfterMiddleware(MiddlewareMixin):
                 if request.resolver_match.view_name is not None:
                     view_name = request.resolver_match.view_name
         return view_name
-
-    def _get_view_or_path(self, request):
-        if PROMETHEUS_USE_PATH_LABELS:
-            return request.path
-        return self._get_view_name(request)
 
     def process_view(self, request, view_func, *view_args, **view_kwargs):
         transport = self._transport(request)

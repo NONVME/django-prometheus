@@ -1,7 +1,7 @@
 from django.utils.deprecation import MiddlewareMixin
 from prometheus_client import Counter, Histogram
 
-from django_prometheus.conf import NAMESPACE, PROMETHEUS_LATENCY_BUCKETS
+from django_prometheus.conf import NAMESPACE, PROMETHEUS_LATENCY_BUCKETS, PROMETHEUS_USE_PATH_LABELS
 from django_prometheus.utils import PowersOf, Time, TimeSince
 
 
@@ -53,7 +53,7 @@ class Metrics:
             Histogram,
             "django_http_requests_latency_seconds_by_view_method",
             "Histogram of request processing time labelled by view.",
-            ["view", "method"],
+            ["view" if not PROMETHEUS_USE_PATH_LABELS else "path", "method"],
             buckets=PROMETHEUS_LATENCY_BUCKETS,
             namespace=NAMESPACE,
         )
@@ -88,8 +88,8 @@ class Metrics:
         self.requests_by_view_transport_method = self.register_metric(
             Counter,
             "django_http_requests_total_by_view_transport_method",
-            "Count of requests by view, transport, method.",
-            ["view", "transport", "method"],
+            "Count of requests by view/path, transport, method.",
+            ["view" if not PROMETHEUS_USE_PATH_LABELS else "path", "transport", "method"],
             namespace=NAMESPACE,
         )
         self.requests_body_bytes = self.register_metric(
@@ -118,8 +118,8 @@ class Metrics:
         self.responses_by_status_view_method = self.register_metric(
             Counter,
             "django_http_responses_total_by_status_view_method",
-            "Count of responses by status, view, method.",
-            ["status", "view", "method"],
+            "Count of responses by status, view/path, method.",
+            ["status", "view" if not PROMETHEUS_USE_PATH_LABELS else "path", "method"],
             namespace=NAMESPACE,
         )
         self.responses_body_bytes = self.register_metric(
@@ -234,17 +234,25 @@ class PrometheusAfterMiddleware(MiddlewareMixin):
                     view_name = request.resolver_match.view_name
         return view_name
 
+    def _get_view_or_path(self, request):
+        if PROMETHEUS_USE_PATH_LABELS:
+            return request.path
+        return self._get_view_name(request)
+
     def process_view(self, request, view_func, *view_args, **view_kwargs):
         transport = self._transport(request)
         method = self._method(request)
         if hasattr(request, "resolver_match"):
-            name = request.resolver_match.view_name or "<unnamed view>"
+            label_value = self._get_view_or_path(request)
+            label_name = "path" if PROMETHEUS_USE_PATH_LABELS else "view"
             self.label_metric(
                 self.metrics.requests_by_view_transport_method,
                 request,
-                view=name,
-                transport=transport,
-                method=method,
+                **{
+                    label_name: label_value,
+                    "transport": transport,
+                    "method": method,
+                }
             ).inc()
 
     def process_template_response(self, request, response):
@@ -259,16 +267,21 @@ class PrometheusAfterMiddleware(MiddlewareMixin):
 
     def process_response(self, request, response):
         method = self._method(request)
-        name = self._get_view_name(request)
+        label_value = self._get_view_or_path(request)
+        label_name = "path" if PROMETHEUS_USE_PATH_LABELS else "view"
         status = str(response.status_code)
+
         self.label_metric(self.metrics.responses_by_status, request, response, status=status).inc()
+
         self.label_metric(
             self.metrics.responses_by_status_view_method,
             request,
             response,
-            status=status,
-            view=name,
-            method=method,
+            **{
+                "status": status,
+                label_name: label_value,
+                "method": method
+            }
         ).inc()
         if hasattr(response, "charset"):
             self.label_metric(
@@ -286,8 +299,10 @@ class PrometheusAfterMiddleware(MiddlewareMixin):
                 self.metrics.requests_latency_by_view_method,
                 request,
                 response,
-                view=self._get_view_name(request),
-                method=request.method,
+                **{
+                    label_name: label_value,
+                    "method": request.method,
+                }
             ).observe(TimeSince(request.prometheus_after_middleware_event))
         else:
             self.label_metric(self.metrics.requests_unknown_latency, request, response).inc()
@@ -296,14 +311,15 @@ class PrometheusAfterMiddleware(MiddlewareMixin):
     def process_exception(self, request, exception):
         self.label_metric(self.metrics.exceptions_by_type, request, type=type(exception).__name__).inc()
         if hasattr(request, "resolver_match"):
-            name = request.resolver_match.view_name or "<unnamed view>"
-            self.label_metric(self.metrics.exceptions_by_view, request, view=name).inc()
-        if hasattr(request, "prometheus_after_middleware_event"):
+            label_value = self._get_view_or_path(request)
+            label_name = "path" if PROMETHEUS_USE_PATH_LABELS else "view"
             self.label_metric(
                 self.metrics.requests_latency_by_view_method,
                 request,
-                view=self._get_view_name(request),
-                method=request.method,
+                **{
+                    label_name: label_value,
+                    "method": request.method,
+                }
             ).observe(TimeSince(request.prometheus_after_middleware_event))
         else:
             self.label_metric(self.metrics.requests_unknown_latency, request).inc()

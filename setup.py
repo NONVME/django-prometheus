@@ -44,6 +44,7 @@ setup(
     options={"bdist_wheel": {"universal": "1"}},
     install_requires=[
         "prometheus-client>=0.7",
+        "Django>=3.1,<6.0",
     ],
     classifiers=[
         "Development Status :: 5 - Production/Stable",
